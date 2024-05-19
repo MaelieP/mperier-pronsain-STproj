@@ -1,0 +1,75 @@
+---
+title: "Script2"
+author: "Maëlie Perier"
+date: "2024-05-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(urca)
+#library(fUnitRoots)
+library(zoo)
+library(lubridate)
+
+install.packages("forecast")
+#library(forecast)
+library(tseries)
+library(stargazer)
+#library(astsa)
+library(ellipse)
+library(ggplot2)
+
+```
+
+```{r}
+datafile <- "valeurs_mensuelles-glace.csv"
+data <- read.csv(datafile, sep = ";", skip = 3, col.names = c("Date", "x1", "ignore"))
+
+data$Date <- as.yearmon(data$Date)
+data_filtered <- subset(data, Date <= as.yearmon("Dec 2019"))
+
+data_ts_ <- ts(data_filtered$x1, start = data_filtered$Date[360], frequency = 12)
+
+data_ts_entiere <- ts(data$x1, start = data$Date[360], frequency = 12)
+
+data_ts <- zoo(data_ts_, order.by = (index(data_ts_)))
+
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+plot(data_ts, xlab="Years", ylab = "Industrial Production Index")
+acf(data_ts, 6*12, ylim=c(-0.5, 1))
+
+```
+
+```{r}
+data_ts_diff <- diff(data_ts)
+acf(data_ts_diff, 26*12)
+pacf(data_ts_diff, 6*12)
+ data_ts_diff_seasonal <- diff(data_ts, lag = 12)
+acf(data_ts_diff_seasonal, 8*12 )
+pacf(data_ts_diff_seasonal, 6*12)
+data_ts_diff_combined <- diff(diff(data_ts, lag = 12), differences = 1)
+
+# 4. Vérifier la stationnarité après différenciation
+# Plot ACF and PACF
+acf(data_ts_diff_combined, 10*12)
+pacf(data_ts_diff_combined)
+
+adf_test_result <- adf.test(data_ts_diff_combined)
+print(adf_test_result)
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
