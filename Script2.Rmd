@@ -8,7 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
+## On charge les packages
 
 ```{r}
 library(urca)
@@ -26,56 +26,47 @@ library(ggplot2)
 
 ```
 
+## On importe les données - gaz naturel 
+Ensuite on prend les données de 2000 à 2019 pour éviter les chocs causés par les chocs pétroliers de 1990 ainsi que le Covid-19. 
+On range le df par date puis on le converti en série temporelle
+
 ```{r}
 datafile <- "valeurs_mensuelles.csv"
 data <- read.csv(datafile, sep = ";", skip = 3, col.names = c("Date", "x1", "ignore"))
 
 data$Date <- as.yearmon(data$Date)
-data_filt <- subset(data, Date <= as.yearmon("Dec 2019"))
-data_filt <- subset(data_filtered, Date >= as.yearmon(("Jan 2000")))
+data_filt <- subset(data, Date >= as.yearmon("Jan 2000") & Date <= as.yearmon("Dec 2019"))
+data_filt <- data_filt[order(data_filt$Date), ]
 data_ts_ <- ts(data_filt$x1, start = data_filt$Date[1], frequency = 12)
 
-data_ts_entiere <- ts(data$x1, start = data$Date[240], frequency = 12)
+data_ts_entiere <- ts(data$x1, start = data$Date[1], frequency = 12)
 
-data_ts <- zoo(data_ts_, order.by = (index(data_ts_)))
-
-
-
+data_ts <- zoo(data_ts_, order.by = index(data_ts_))
 ```
 
 ## Including Plots
 
-You can also embed plots, for example:
 
 ```{r}
 plot(data_ts, xlab="Years", ylab = "Industrial Production Index")
-acf(data_ts, 6*12, ylim=c(-0.5, 1))
-
+acf(data_ts, 20*12, ylim=c(-0.5, 1))
+pacf(data_ts, 6*12, ylim=c(-0.4, 0.5))
 ```
 
 ```{r}
 data_ts_diff <- diff(data_ts)
-acf(data_ts_diff, 10*12) 
-pacf(data_ts_diff, 6*12)
+plot(data_ts_diff, xlab="Years", ylab = "Industrial Production Index differencié")
 
-qmax <- 9
+acf(data_ts_diff, 10*12) 
+pacf(data_ts_diff, 10*12)
+
+qmax <- 7
 pmax <- 2
 
 ```
+La série semble stationnaire, la moyenne semble nulle même si la variance évolue entre avant et après 2013. Nous souhaitons désormais vérifier notre hypothèse de stationarité à l'aide de qqs tests. 
 
 ```{r}
-fit_arima_209 <- Arima(data_ts_diff, order = c(2, 0, 9))
-summary(fit_arima_201)
-
-checkresiduals(fit_arima_209)
-
-# Ljung-Box test for residuals
-Box.test(residuals(fit_arima_209), lag=20, type="Ljung-Box")
-```
-
-
-```{r}
-
 adf_test_result <- adf.test(data_ts_diff)
 print(adf_test_result)
 
@@ -85,8 +76,36 @@ print(pp_result)
 kpss_result <- kpss.test(data_ts_diff)
 print(kpss_result)
 ```
+Les tests confirment qu'on ne peut pas rejeter l'hypothèse de stationarité 
+En regardant les graphiques précédents, il semble qu'on ait pmax = 2 et qmax = 7 
 
 ```{r}
+
+arima207 <- arima(data_ts_diff,c(2,0,7))
+Box.test(arima207$residuals,lag=15, type="Ljung-Box", fitdf=6)
+
+
+Qtests <- function(series, k, fitdf=0) {
+pvals <- apply(matrix(1:k), 1, FUN=function(l) {
+pval <- if (l<=fitdf) NA else Box.test(series, lag=l, type="Ljung-Box", fitdf=fitdf)$p.value 
+return(c("lag"=l,"pval"=pval))
+})
+return(t(pvals))
+}
+Qtests(arima207$residuals, 15, 6)
+
+
+```
+L'absence d'autocorrélation entre les résidus n'est jamais rejetée à 95% jusqu'à 15 retards. Le modèle semble donc valide
+
+
+
+
+
+```{r}
+
+```
+
 fit <- auto.arima(data_ts_diff)
 summary(fit)
 checkresiduals(fit)
