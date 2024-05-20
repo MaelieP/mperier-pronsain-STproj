@@ -15,7 +15,7 @@ library(urca)
 #library(fUnitRoots)
 library(zoo)
 library(lubridate)
-
+#install.packages("tseries")
 #install.packages("forecast")
 library(forecast)
 library(tseries)
@@ -79,11 +79,21 @@ print(kpss_result)
 Les tests confirment qu'on ne peut pas rejeter l'hypothèse de stationarité 
 En regardant les graphiques précédents, il semble qu'on ait pmax = 2 et qmax = 7 
 
+On regarde si le modèle ARIMA(2,0,7) est bien ajusté et valide (respectivement que ses coeffs sont significatifs et que ces résidus ne sont pas autocorrélés)
+
 ```{r}
-
 arima207 <- arima(data_ts_diff,c(2,0,7))
-Box.test(arima207$residuals,lag=15, type="Ljung-Box", fitdf=6)
 
+signif <- function(estim){
+coef <- estim$coef
+se <- sqrt(diag(estim$var.coef))
+t <- coef/se
+pval <- ((1-pnorm(abs(t)))*2)
+return(rbind(coef,se,pval))
+}
+signif(arima207)
+
+Box.test(arima207$residuals,lag=15, type="Ljung-Box", fitdf=6)
 
 Qtests <- function(series, k, fitdf=0) {
 pvals <- apply(matrix(1:k), 1, FUN=function(l) {
@@ -94,10 +104,106 @@ return(t(pvals))
 }
 Qtests(arima207$residuals, 15, 6)
 
+```
+L'absence d'autocorrélation entre les résidus n'est jamais rejetée à 95% jusqu'à 15 retards. Le modèle semble donc valide. Toutefois, il n'est pas bien ajusté car les coefficients MA(q) avec q > 4 ne sont pas significatifs. 
+On fait une fonction pour tester tous les modèles ARIMA(p,d,q) avec p < pmax et q < qmax et voir s'ils sont 1) bien ajustés et 2) valides. Une fois cela fait, on choisira entre les différents modèles selectionnés. 
+
+
+```{r}
+signif <- function(estim){# test des significations individuelles des coefficients 
+coef <- estim$coef
+se <- sqrt(diag(estim$var.coef))
+t <- coef/se
+pval <- (1-pnorm(abs(t)))*2
+return(rbind(coef,pval)) 
+}
+for (p in 0:2) { 
+  for (q in 0:7) {
+    print(c(p,q))
+    print(signif(arima(data_ts, c(p,0,q), include.mean = FALSE))) }
+}
+```
+On retient les modèles ARIMA suivant : 
+*ARIMA(0,0,1)
+*ARIMA(0,0,2)
+*ARIMA(0,0,3)
+*ARIMA(0,0,4)
+*ARIMA(0,0,5)
+*ARIMA(0,0,6)
+*ARIMA(0,0,7)
+*ARIMA(1,0,0)
+*ARIMA(1,0,2)
+*ARIMA(2,0,1)
+```{r}
+arima_coefs <- list(
+  c(0, 0, 1), c(0, 0, 2), c(0, 0, 3),
+  c(0, 0, 4), c(0, 0, 5), c(0, 0, 6),
+  c(0, 0, 7), c(1, 0, 0), c(1, 0, 2),
+  c(2, 0, 1)
+)
+
+# Loop through the list of coefficients
+valid_arima <- list()
+for (coefs in arima_coefs) {
+  cat("\nFitting ARIMA(", coefs[1], ",", coefs[2], ",", coefs[3], ") model:\n", sep = "")
+  tryCatch({
+    model <- arima(data_ts, order = coefs, include.mean = FALSE)
+    residuals <- residuals(model)
+    
+    # Perform Box-Ljung test on residuals
+    box_test <- Box.test(residuals, lag = 15, type = "Ljung-Box", fitdf = sum(coefs))
+    cat("\nBox-Ljung Test:\n")
+    print(box_test)
+    
+    if (box_test$p.value > 0.05) {
+      valid_arima <- c(valid_arima, list(coefs))
+    }
+    
+  })
+}
+
+cat("\nList of ARIMA models with Box-Ljung test p-value > 0.05:\n")
+for (model in valid_arima) {
+  cat("ARIMA(", model[[1]], ",", model[[2]], ",", model[[3]], ")\n", sep = "")
+}
+```
+Il nous reste donc plus que deux modèles qui sont à la fois valides et avec des coefficients significatifs : ARIMA(1,0,2) et ARIMA(2,0,1)
+Arbitrons entre les deux à l'aide des AIC/BIC
+
+```{r}
+aic_12 <- AIC(arima(data_ts, order=c(1,0,2)))
+bic_12 <- BIC(arima(data_ts, order=c(1,0,2)))
+aic_21 <- AIC(arima(data_ts, order=c(2,0,1)))
+bic_21 <- BIC(arima(data_ts, order=c(2,0,1)))
+
+cat("AIC et BIC de l'ARMA(1,2)", aic_12, "/", bic_12,"\nAIC et BIC de l'ARMA(2,1)", aic_21, "/", bic_21)
 
 ```
-L'absence d'autocorrélation entre les résidus n'est jamais rejetée à 95% jusqu'à 15 retards. Le modèle semble donc valide
+Les AIC et BIC 
 
+```{r}
+test_all_arima_models <- function(ts_data, d, pmax, qmax) {
+  for (p in 0:pmax) {
+    for (q in 0:qmax) {
+      cat("\nFitting ARIMA(", p, ",", d, ",", q, ")\n", sep = "")
+      model <- tryCatch({
+        Arima(ts_data, order = c(p, d, q))
+      }, error = function(e) {
+        cat("Error fitting model\n")
+        NULL
+      })
+      
+      if (!is.null(model)) {
+        arimafit(model)
+      }
+    }
+  }
+}
+
+# Example usage
+# Assuming `data_ts` is your time series data
+test_all_arima_models(data_ts, d = 0, pmax = 2, qmax = 7)
+```
 
 
 
