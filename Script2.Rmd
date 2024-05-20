@@ -16,8 +16,8 @@ library(urca)
 library(zoo)
 library(lubridate)
 
-install.packages("forecast")
-#library(forecast)
+#install.packages("forecast")
+library(forecast)
 library(tseries)
 library(stargazer)
 #library(astsa)
@@ -27,15 +27,15 @@ library(ggplot2)
 ```
 
 ```{r}
-datafile <- "valeurs_mensuelles-glace.csv"
+datafile <- "valeurs_mensuelles.csv"
 data <- read.csv(datafile, sep = ";", skip = 3, col.names = c("Date", "x1", "ignore"))
 
 data$Date <- as.yearmon(data$Date)
-data_filtered <- subset(data, Date <= as.yearmon("Dec 2019"))
+data_filt <- subset(data, Date <= as.yearmon("Dec 2019"))
+data_filt <- subset(data_filtered, Date >= as.yearmon(("Jan 2000")))
+data_ts_ <- ts(data_filt$x1, start = data_filt$Date[1], frequency = 12)
 
-data_ts_ <- ts(data_filtered$x1, start = data_filtered$Date[360], frequency = 12)
-
-data_ts_entiere <- ts(data$x1, start = data$Date[360], frequency = 12)
+data_ts_entiere <- ts(data$x1, start = data$Date[240], frequency = 12)
 
 data_ts <- zoo(data_ts_, order.by = (index(data_ts_)))
 
@@ -55,21 +55,62 @@ acf(data_ts, 6*12, ylim=c(-0.5, 1))
 
 ```{r}
 data_ts_diff <- diff(data_ts)
-acf(data_ts_diff, 26*12)
+acf(data_ts_diff, 10*12) 
 pacf(data_ts_diff, 6*12)
- data_ts_diff_seasonal <- diff(data_ts, lag = 12)
-acf(data_ts_diff_seasonal, 8*12 )
-pacf(data_ts_diff_seasonal, 6*12)
-data_ts_diff_combined <- diff(diff(data_ts, lag = 12), differences = 1)
 
-# 4. Vérifier la stationnarité après différenciation
-# Plot ACF and PACF
-acf(data_ts_diff_combined, 10*12)
-pacf(data_ts_diff_combined)
-
-adf_test_result <- adf.test(data_ts_diff_combined)
-print(adf_test_result)
+qmax <- 9
+pmax <- 2
 
 ```
 
+```{r}
+fit_arima_209 <- Arima(data_ts_diff, order = c(2, 0, 9))
+summary(fit_arima_201)
+
+checkresiduals(fit_arima_209)
+
+# Ljung-Box test for residuals
+Box.test(residuals(fit_arima_209), lag=20, type="Ljung-Box")
+```
+
+
+```{r}
+
+adf_test_result <- adf.test(data_ts_diff)
+print(adf_test_result)
+
+pp_result <- pp.test(data_ts_diff)
+print(pp_result)
+
+kpss_result <- kpss.test(data_ts_diff)
+print(kpss_result)
+```
+
+```{r}
+fit <- auto.arima(data_ts_diff)
+summary(fit)
+checkresiduals(fit)
+
+# Ljung-Box test for residuals
+Box.test(residuals(fit), lag=20, type="Ljung-Box")
+
+
+```
+
+```{r}
+acf(residuals(fit_auto), 6*12, main="ACF of Residuals")
+pacf(residuals(fit_auto), main="PACF of Residuals")
+
+# Fit a refined model (example)
+fit_refined <- Arima(data_ts_diff_combined, order=c(3,0,1), seasonal=list(order=c(0,0,2), period=12))
+
+# Summary of the refined model
+summary(fit_refined)
+
+# Check residuals of the refined model
+checkresiduals(fit_refined)
+
+# Ljung-Box test for residuals of the refined model
+Box.test(residuals(fit_refined), lag=20, type="Ljung-Box")
+```
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
