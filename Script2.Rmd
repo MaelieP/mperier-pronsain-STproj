@@ -179,63 +179,40 @@ bic_21 <- BIC(arima(data_ts, order=c(2,0,1)))
 cat("AIC et BIC de l'ARMA(1,2)", aic_12, "/", bic_12,"\nAIC et BIC de l'ARMA(2,1)", aic_21, "/", bic_21)
 
 ```
-Les AIC et BIC 
+Les AIC et BIC de l'ARMA(1,2) sont légèrement plus faibles, on opte donc pour ce modèle là. 
 
-```{r}
-test_all_arima_models <- function(ts_data, d, pmax, qmax) {
-  for (p in 0:pmax) {
-    for (q in 0:qmax) {
-      cat("\nFitting ARIMA(", p, ",", d, ",", q, ")\n", sep = "")
-      model <- tryCatch({
-        Arima(ts_data, order = c(p, d, q))
-      }, error = function(e) {
-        cat("Error fitting model\n")
-        NULL
-      })
-      
-      if (!is.null(model)) {
-        arimafit(model)
-      }
-    }
-  }
-}
+### Question 5
+Puisque notre série différenciée suit un ARMA(1,2), notre série initiale suit donc un ARIMA(1,1,2) 
 
-# Example usage
-# Assuming `data_ts` is your time series data
-test_all_arima_models(data_ts, d = 0, pmax = 2, qmax = 7)
-```
+We can conclude that the initial series $Z_t$ follows an ARMA(1,2) with drift.
+Let us first write the expression of the differentiated series, which follows an ARMA(1,2):
 
+$$
+\Delta Z_t =: X_t = \phi_1 X_{t-1} + \epsilon_t + \psi_1 \epsilon_{t-1} + \psi_2 \epsilon_{t-2}
+$$
 
+hence
 
+$$
+(1 - \phi_1 B)X_t = (1 + \psi_1 B + \psi_2 B^2) \epsilon_t
+$$
 
-```{r}
+which gives
 
-```
+$$
+(1 - \phi_1 B)(1 - B)Z_t = (1 + \psi_1 B + \psi_2 B^2) \epsilon_t
+$$
 
-fit <- auto.arima(data_ts_diff)
-summary(fit)
-checkresiduals(fit)
+Replacing the $\phi_1, \psi_1, \psi_2$ by the estimated coefficients (that we obtained earlier), we get
 
-# Ljung-Box test for residuals
-Box.test(residuals(fit), lag=20, type="Ljung-Box")
+$$
+(1 - 0.50 B)(1 - B)Z_t = (1 + 0.74 B - 0.36 B^2) \epsilon_t
+$$
+
+or
+
+$$
+Z_t = 1.5 Z_{t-1} - 0.50 Z_{t-2} + \epsilon_t + 0.74 \epsilon_{t-1} - 0.36 \epsilon_{t-2}
+$$
 
 
-```
-
-```{r}
-acf(residuals(fit_auto), 6*12, main="ACF of Residuals")
-pacf(residuals(fit_auto), main="PACF of Residuals")
-
-# Fit a refined model (example)
-fit_refined <- Arima(data_ts_diff_combined, order=c(3,0,1), seasonal=list(order=c(0,0,2), period=12))
-
-# Summary of the refined model
-summary(fit_refined)
-
-# Check residuals of the refined model
-checkresiduals(fit_refined)
-
-# Ljung-Box test for residuals of the refined model
-Box.test(residuals(fit_refined), lag=20, type="Ljung-Box")
-```
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
