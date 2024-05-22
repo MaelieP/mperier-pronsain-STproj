@@ -2,7 +2,9 @@
 title: "Script2"
 author: "Maëlie Perier"
 date: "2024-05-18"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -11,6 +13,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ## On charge les packages
 
 ```{r}
+install.packages('tinytex')
+tinytex::install_tinytex()
 library(urca)
 #library(fUnitRoots)
 library(zoo)
@@ -31,7 +35,7 @@ Ensuite on prend les données de 2000 à 2019 pour éviter les chocs causés par
 On range le df par date puis on le converti en série temporelle
 
 ```{r}
-datafile <- "valeurs_mensuelles.csv"
+datafile <- "~/Desktop/valeurs_mensuelles.csv"
 data <- read.csv(datafile, sep = ";", skip = 3, col.names = c("Date", "x1", "ignore"))
 
 data$Date <- as.yearmon(data$Date)
@@ -76,7 +80,7 @@ print(pp_result)
 kpss_result <- kpss.test(data_ts_diff)
 print(kpss_result)
 ```
-Les tests confirment qu'on ne peut pas rejeter l'hypothèse de stationarité 
+Les tests confirment qu'on rejete l'hypothèse de stationarité à tous les seuils
 En regardant les graphiques précédents, il semble qu'on ait pmax = 2 et qmax = 7 
 
 On regarde si le modèle ARIMA(2,0,7) est bien ajusté et valide (respectivement que ses coeffs sont significatifs et que ces résidus ne sont pas autocorrélés)
@@ -123,7 +127,7 @@ for (p in 0:2) {
     print(signif(arima(data_ts, c(p,0,q), include.mean = FALSE))) }
 }
 ```
-On retient les modèles ARIMA suivant : 
+On retient les modèles ARIMA suivant qui sont ajustés : 
 *ARIMA(0,0,1)
 *ARIMA(0,0,2)
 *ARIMA(0,0,3)
@@ -181,6 +185,7 @@ cat("AIC et BIC de l'ARMA(1,2)", aic_12, "/", bic_12,"\nAIC et BIC de l'ARMA(2,1
 ```
 Les AIC et BIC de l'ARMA(1,2) sont légèrement plus faibles, on opte donc pour ce modèle là. 
 
+
 ### Question 5
 Puisque notre série différenciée suit un ARMA(1,2), notre série initiale suit donc un ARIMA(1,1,2) 
 
@@ -219,4 +224,87 @@ Z_t = 0.999 Z_{t-1} + \epsilon_t - 0.212 \epsilon_{t-1} - 0.346 \epsilon_{t-2}
 \]
 $$
 
+```{r}
+## Question 7: Diagnostic du modèle et vérification de l'hypothèse de normalité des résidus
+
+# Ajustement du modèle ARIMA(1,0,2)
+fit <- arima(data_ts, order=c(1,0,2))
+
+# Diagnostic du modèle ARIMA(1,0,2)
+tsdiag(fit)
+
+# Test de Jarque-Bera pour la normalité des résidus
+jarque.bera.test(fit$residuals)
+
+# Q-Q plot des résidus
+qqnorm(fit$residuals)
+qqline(fit$residuals, col = "red")
+
+# Densité des résidus
+plot(density(fit$residuals), lwd=0.5, xlim=range(fit$residuals), main="Densité des résidus")
+mu <- mean(fit$residuals)
+sigma <- sd(fit$residuals)
+x <- seq(min(fit$residuals), max(fit$residuals), length.out=100)
+y <- dnorm(x, mean=mu, sd=sigma)
+lines(x, y, lwd=0.5, col="blue")
+
+
+```
+```{r}
+## Question 8: Vérification des racines du modèle
+
+# Extraction des coefficients du modèle ARIMA(1,0,2)
+phi_1 <- as.numeric(fit$coef[1])
+theta_1 <- as.numeric(fit$coef["ma1"])
+theta_2 <- as.numeric(fit$coef["ma2"])
+sigma2 <- as.numeric(fit$sigma2)
+
+# Affichage des coefficients
+phi_1
+theta_1
+theta_2
+sigma2
+
+# Vérification des racines
+ar_coefs <- c(phi_1)
+ma_coefs <- c(theta_1, theta_2)
+
+# Vérification si les racines sont en dehors du cercle unité
+ar_roots <- polyroot(c(1, -ar_coefs))
+ma_roots <- polyroot(c(1, ma_coefs))
+
+abs(ar_roots)
+abs(ma_roots)
+
+all(abs(ar_roots) > 1)
+all(abs(ma_roots) > 1)
+
+## Prédiction
+
+# Prédiction des deux prochaines valeurs
+XT1 <- predict(fit, n.ahead=2)$pred[1]
+XT2 <- predict(fit, n.ahead=2)$pred[2]
+
+XT1
+XT2
+
+# Prédiction pour la série
+fore <- forecast(fit, h=5, level=95)
+par(mfrow=c(1,1))
+plot(fore, xlim=c(2018,2024), col=1, fcol=2, shaded=TRUE, xlab="Temps", ylab="Valeur", main="Prévision pour la série")
+
+# Calcul de la matrice de variance-covariance
+Sigma <- matrix(c(sigma2, theta_1 * sigma2, theta_2 * sigma2,
+                  theta_1 * sigma2, sigma2, 0,
+                  theta_2 * sigma2, 0, sigma2), ncol=3)
+
+# Plot de la région de confiance bivariée à 95%
+library(ellipse)
+plot(XT1, XT2, xlim=c(-10, 10), ylim=c(-10, 10), xlab="Prévision pour X_{T+1}", ylab="Prévision pour X_{T+2}",
+     main="Région de confiance bivariée à 95%")
+ellipse(Sigma[1:2, 1:2], center=c(XT1, XT2), type="l", col="red", radius=1)
+points(XT1, XT2, col="blue")
+abline(h=XT2, v=XT1, col="blue")
+abline(h=0, v=0)
+```
 
