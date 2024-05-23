@@ -13,8 +13,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ## On charge les packages
 
 ```{r}
-install.packages('tinytex')
-tinytex::install_tinytex()
+#install.packages('tinytex')
+#tinytex::install_tinytex()
 library(urca)
 #library(fUnitRoots)
 library(zoo)
@@ -35,7 +35,7 @@ Ensuite on prend les données de 2000 à 2019 pour éviter les chocs causés par
 On range le df par date puis on le converti en série temporelle
 
 ```{r}
-datafile <- "~/Desktop/valeurs_mensuelles.csv"
+datafile <- "valeurs_mensuelles.csv"
 data <- read.csv(datafile, sep = ";", skip = 3, col.names = c("Date", "x1", "ignore"))
 
 data$Date <- as.yearmon(data$Date)
@@ -61,10 +61,10 @@ pacf(data_ts, 6*12, ylim=c(-0.4, 0.5))
 data_ts_diff <- diff(data_ts)
 plot(data_ts_diff, xlab="Years", ylab = "Industrial Production Index differencié")
 
-acf(data_ts_diff, 10*12) 
-pacf(data_ts_diff, 10*12)
+acf(data_ts_diff, 3*12) 
+pacf(data_ts_diff, 3*12)
 
-qmax <- 7
+qmax <- 2
 pmax <- 2
 
 ```
@@ -81,12 +81,12 @@ kpss_result <- kpss.test(data_ts_diff)
 print(kpss_result)
 ```
 Les tests confirment qu'on rejete l'hypothèse de stationarité à tous les seuils
-En regardant les graphiques précédents, il semble qu'on ait pmax = 2 et qmax = 7 
+En regardant les graphiques précédents, il semble qu'on ait pmax = 2 et qmax = 2 
 
-On regarde si le modèle ARIMA(2,0,7) est bien ajusté et valide (respectivement que ses coeffs sont significatifs et que ces résidus ne sont pas autocorrélés)
+On regarde si le modèle ARIMA(2,0,2) est bien ajusté et valide (respectivement que ses coeffs sont significatifs et que ces résidus ne sont pas autocorrélés)
 
 ```{r}
-arima207 <- arima(data_ts_diff,c(2,0,7))
+arima202 <- arima(data_ts_diff,c(2,0,2))
 
 signif <- function(estim){
 coef <- estim$coef
@@ -95,9 +95,9 @@ t <- coef/se
 pval <- ((1-pnorm(abs(t)))*2)
 return(rbind(coef,se,pval))
 }
-signif(arima207)
+signif(arima202)
 
-Box.test(arima207$residuals,lag=15, type="Ljung-Box", fitdf=6)
+Box.test(arima202$residuals,lag=15, type="Ljung-Box", fitdf=4)
 
 Qtests <- function(series, k, fitdf=0) {
 pvals <- apply(matrix(1:k), 1, FUN=function(l) {
@@ -106,10 +106,10 @@ return(c("lag"=l,"pval"=pval))
 })
 return(t(pvals))
 }
-Qtests(arima207$residuals, 15, 6)
+Qtests(arima202$residuals, 15, 4)
 
 ```
-L'absence d'autocorrélation entre les résidus n'est jamais rejetée à 95% jusqu'à 15 retards. Le modèle semble donc valide. Toutefois, il n'est pas bien ajusté car les coefficients MA(q) avec q > 4 ne sont pas significatifs. 
+L'absence d'autocorrélation entre les résidus n'est jamais rejetée à 95% jusqu'à 15 retards. Le modèle semble donc valide.
 On fait une fonction pour tester tous les modèles ARIMA(p,d,q) avec p < pmax et q < qmax et voir s'ils sont 1) bien ajustés et 2) valides. Une fois cela fait, on choisira entre les différents modèles selectionnés. 
 
 
@@ -122,27 +122,21 @@ pval <- (1-pnorm(abs(t)))*2
 return(rbind(coef,pval)) 
 }
 for (p in 0:2) { 
-  for (q in 0:7) {
+  for (q in 0:2) {
     print(c(p,q))
     print(signif(arima(data_ts, c(p,0,q), include.mean = FALSE))) }
 }
 ```
 On retient les modèles ARIMA suivant qui sont ajustés : 
-*ARIMA(0,0,1)
-*ARIMA(0,0,2)
-*ARIMA(0,0,3)
-*ARIMA(0,0,4)
-*ARIMA(0,0,5)
-*ARIMA(0,0,6)
-*ARIMA(0,0,7)
-*ARIMA(1,0,0)
-*ARIMA(1,0,2)
-*ARIMA(2,0,1)
+ARIMA(0,0,1)
+ARIMA(0,0,2)
+ARIMA(1,0,0)
+ARIMA(1,0,2)
+ARIMA(2,0,1)
 ```{r}
 arima_coefs <- list(
-  c(0, 0, 1), c(0, 0, 2), c(0, 0, 3),
-  c(0, 0, 4), c(0, 0, 5), c(0, 0, 6),
-  c(0, 0, 7), c(1, 0, 0), c(1, 0, 2),
+  c(0, 0, 1), c(0, 0, 2), 
+  c(1, 0, 0), c(1, 0, 2),
   c(2, 0, 1)
 )
 
@@ -184,45 +178,6 @@ cat("AIC et BIC de l'ARMA(1,2)", aic_12, "/", bic_12,"\nAIC et BIC de l'ARMA(2,1
 
 ```
 Les AIC et BIC de l'ARMA(1,2) sont légèrement plus faibles, on opte donc pour ce modèle là. 
-
-
-### Question 5
-Puisque notre série différenciée suit un ARMA(1,2), notre série initiale suit donc un ARIMA(1,1,2) 
-
-We can conclude that the initial series $Z_t$ follows an ARMA(1,2) with drift.
-Let us first write the expression of the differentiated series, which follows an ARMA(1,2):
-
-$$
-\Delta Z_t =: X_t = \phi_1 X_{t-1} + \epsilon_t + \psi_1 \epsilon_{t-1} + \psi_2 \epsilon_{t-2}
-$$
-
-hence
-
-$$
-(1 - \phi_1 B)X_t = (1 + \psi_1 B + \psi_2 B^2) \epsilon_t
-$$
-
-which gives
-
-$$
-(1 - \phi_1 B)(1 - B)Z_t = (1 + \psi_1 B + \psi_2 B^2) \epsilon_t
-$$
-
-Replacing the $\phi_1, \psi_1, \psi_2$ by the estimated coefficients (that we obtained earlier), we get
-
-$$
-\[
-(1 - 0.999 B) Z_t = (1 - 0.212 B - 0.346 B^2) \epsilon_t
-\]
-$$
-
-or
-
-$$
-\[
-Z_t = 0.999 Z_{t-1} + \epsilon_t - 0.212 \epsilon_{t-1} - 0.346 \epsilon_{t-2}
-\]
-$$
 
 ```{r}
 ## Question 7: Diagnostic du modèle et vérification de l'hypothèse de normalité des résidus
